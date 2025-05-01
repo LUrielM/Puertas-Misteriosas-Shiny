@@ -1,0 +1,563 @@
+library(shiny)
+library(shinyjs)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+ui <- fluidPage(
+  useShinyjs(),
+  titlePanel("El Problema de Monty Hall - Puertas Misteriosas"),
+  
+  # Panel de inicio con botones mejorados
+  div(id = "inicio_panel",
+      fluidRow(
+        column(12, 
+               style = "text-align: center;",
+               div(style = "display: inline-block; width: 200px; margin: 10px;",
+                   actionButton("modo_jugar", "Demo",
+                                style = "background: linear-gradient(to bottom, #1abc9c, #16a085); 
+                                        color: white; 
+                                        font-size: 20px; 
+                                        width: 100%;
+                                        border-radius: 10px;
+                                        border: none;
+                                        padding: 10px;
+                                        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+                                        transition: all 0.3s ease;",
+                                onmouseover = "$(this).css({'background': 'linear-gradient(to bottom, #16a085, #1abc9c)', 'transform': 'scale(1.05)'});",
+                                onmouseout = "$(this).css({'background': 'linear-gradient(to bottom, #1abc9c, #16a085)', 'transform': 'scale(1)'});")
+               ),
+               div(style = "display: inline-block; width: 200px; margin: 10px;",
+                   actionButton("modo_admin", "Beta",
+                                style = "background: linear-gradient(to bottom, #34495e, #2c3e50); 
+                                        color: white; 
+                                        font-size: 20px; 
+                                        width: 100%;
+                                        border-radius: 10px;
+                                        border: none;
+                                        padding: 10px;
+                                        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+                                        transition: all 0.3s ease;",
+                                onmouseover = "$(this).css({'background': 'linear-gradient(to bottom, #2c3e50, #34495e)', 'transform': 'scale(1.05)'});",
+                                onmouseout = "$(this).css({'background': 'linear-gradient(to bottom, #34495e, #2c3e50)', 'transform': 'scale(1)'});")
+               )
+        )
+      )
+  ),
+  
+  # Panel de juego
+  div(id = "juego_panel", style = "display:none;",
+      h3("El Problema de Monty Hall"),
+      p("Bienvenido a este famoso acertijo de probabilidad, basado en el programa de TV 'Let's Make a Deal'. Detrás de una de estas tres puertas hay un premio valioso (un 🚗 Tesla), mientras que las otras dos esconden cabras (🐐)."),
+      p("El juego sigue estas reglas:"),
+      tags$ol(
+        tags$li("Tú eliges una puerta (pero no se abre aún)"),
+        tags$li("El presentador, que SABE lo que hay detrás de cada puerta, abre una de las dos restantes que tiene una cabra"),
+        tags$li("Luego te pregunta: ¿Quieres cambiar tu elección o mantenerte con tu puerta inicial?"),
+        tags$li("Finalmente se revela si ganaste el premio o no")
+      ),
+      p("La paradoja: ¿Es mejor cambiar de puerta o quedarse con la inicial? ¡Juega para descubrirlo!"),
+      tags$hr(),
+      
+      h4(textOutput("instruccion_1")),
+      
+      # Botones de puertas
+      fluidRow(
+        column(8,
+               fluidRow(
+                 lapply(1:3, function(i) {
+                   column(4,
+                          actionButton(paste0("puerta_", i),
+                                       label = tagList(
+                                         span(class="label", paste("Puerta", i)),
+                                         span(class="prize", style="display:none;", "🐐 Cabra")
+                                       ),
+                                       style="width:100%; height:120px; font-size:18px; background:#3498db; color:white;"
+                          )
+                   )
+                 })
+               ),
+               div(style="font-size:24px;font-weight:bold;", textOutput("contador_revelacion"))
+        ),
+        column(4,
+               h4("Sólo presentador", style="text-align:center;"),
+               actionButton("mostrar_puertas","Mostrar puertas",
+                            style="background:#9b59b6;color:white;width:100%;margin-bottom:5px;"),
+               actionButton("ocultar_puertas","Ocultar puertas",
+                            style="background:#95a5a6;color:white;width:100%;")
+        )
+      ),
+      
+      # Cambio o continuar
+      fluidRow(
+        column(12, textOutput("pregunta_cambio")),
+        column(6, actionButton("cambiar","Cambiar elección",
+                               style="background:#2ecc71;color:white;font-size:18px;display:none;")),
+        column(6, actionButton("continuar","Continuar con mi elección",
+                               style="background:#f39c12;color:white;font-size:18px;display:none;"))
+      ),
+      
+      tags$hr(),
+      fluidRow(column(12,
+                      h4("Resultado de la ronda:"),
+                      textOutput("estado_juego"),
+                      div(textOutput("mensaje_ganador"), 
+                          style="font-size:24px; font-weight:bold; text-align:center; margin-top:10px;")
+      )),
+      tags$hr(),
+      
+      # Botones de control
+      fluidRow(
+        column(4, actionButton("jugar_nuevo","Jugar de nuevo",
+                               style="background:#27ae60;color:white;font-size:16px;width:100%")),
+        column(4, actionButton("volver_inicio","Regresar al inicio",
+                               style="background:#95a5a6;color:white;font-size:16px;width:100%")),
+        column(4, actionButton("reiniciar","Reiniciar juego",
+                               style="background:#e74c3c;color:white;font-size:16px;width:100%"))
+      ),
+      br(),
+      
+      # Tabla de rondas jugadas
+      h4("Historial de rondas jugadas"),
+      actionButton("mostrar_graficos_rondas", "Construir gráficos de rondas",
+                   style="background:#2980b9;color:white;font-size:16px;width:100%;margin-bottom:10px;"),
+      tableOutput("tabla_rondas"),
+      div(id = "graficos_rondas_panel", style = "display:none; margin-top:20px;",
+          plotOutput("grafico_lineas_rondas"),
+          plotOutput("grafico_barras_rondas")
+      ),
+      tags$hr(),
+      
+      # Panel de simulación desplegable
+      actionButton("toggle_simulacion", "Mostrar/Ocultar panel de simulación",
+                   style="background:#9b59b6;color:white;font-size:16px;width:100%;margin-bottom:10px;"),
+      div(id = "simulacion_panel", style = "display:none;",
+          wellPanel(
+            h4("Simulación rápida"),
+            numericInput("num_simulaciones", "Número de simulaciones por selección:", 
+                         value = 200, min = 10, max = 1000, step = 10),
+            actionButton("simular", "Ejecutar simulación",
+                         style="background:#9b59b6;color:white;width:100%;"),
+            actionButton("mostrar_graficos_simulacion", "Construir gráficos de simulación",
+                         style="background:#2980b9;color:white;font-size:16px;width:100%;margin-top:10px;"),
+            div(id = "graficos_simulacion_panel", style = "display:none; margin-top:20px;",
+                plotOutput("grafico_lineas_simulacion"),
+                plotOutput("grafico_barras_simulacion")
+            ),
+            
+            # Resultados de simulación desplegables
+            actionButton("toggle_resultados_simulacion", "Mostrar/Ocultar resultados de simulación",
+                         style="background:#3498db;color:white;font-size:16px;width:100%;margin-top:10px;"),
+            div(id = "resultados_simulacion_panel", style = "display:none;",
+                h4("Resultados de simulación"),
+                tableOutput("tabla_simulacion")
+            )
+          )
+      )
+  )
+)
+
+server <- function(input, output, session) {
+  np <- 3
+  
+  # Reactivos
+  premios        <- reactiveVal(rep(NA_character_, np))
+  puerta_elegida <- reactiveVal(NULL)
+  host_revealed  <- reactiveVal(NULL)
+  revealed       <- reactiveVal(FALSE)
+  round_done     <- reactiveVal(FALSE)
+  ronda          <- reactiveVal(1)
+  rondas_jugadas <- reactiveVal(data.frame(
+    Ronda = integer(),
+    Premio_obtenido = character(),
+    Cambio_eleccion = character(),
+    Resultado = character(),
+    stringsAsFactors = FALSE
+  ))
+  simulacion_resultados <- reactiveVal(data.frame(
+    Ronda = integer(),
+    Premio_obtenido = character(),
+    Cambio_eleccion = character(),
+    Resultado = character(),
+    stringsAsFactors = FALSE
+  ))
+  
+  # Mostrar/ocultar paneles
+  observeEvent(input$toggle_simulacion, {
+    toggle("simulacion_panel")
+  })
+  
+  observeEvent(input$toggle_resultados_simulacion, {
+    toggle("resultados_simulacion_panel")
+  })
+  
+  observeEvent(input$mostrar_graficos_rondas, {
+    toggle("graficos_rondas_panel")
+  })
+  
+  observeEvent(input$mostrar_graficos_simulacion, {
+    toggle("graficos_simulacion_panel")
+  })
+  
+  # Tablas UI
+  output$tabla_rondas <- renderTable({
+    df <- rondas_jugadas()
+    if(nrow(df) > 0) {
+      names(df) <- c("Ronda", "Premio obtenido", "¿Cambió elección?", "Resultado")
+    }
+    df
+  }, striped = TRUE, hover = TRUE)
+  
+  output$tabla_simulacion <- renderTable({
+    df <- simulacion_resultados()
+    if(nrow(df) > 0) {
+      names(df) <- c("Ronda", "Premio obtenido", "¿Cambió elección?", "Resultado")
+    }
+    df
+  }, striped = TRUE, hover = TRUE)
+  
+  output$instruccion_1 <- renderText("1. Selecciona una puerta")
+  
+  # Asigna premios
+  setPrizes <- function() {
+    v <- rep("🐐 Cabra", np)
+    v[sample(np,1)] <- "🚗 Tesla"
+    premios(v)
+    for(i in seq_len(np)) {
+      runjs(sprintf(
+        "$('#puerta_%s .prize').text('%s');",
+        i, premios()[i]
+      ))
+    }
+  }
+  
+  # Reinicia completamente el juego (incluyendo tabla)
+  resetGame <- function() {
+    ronda(1)
+    rondas_jugadas(data.frame(
+      Ronda = integer(),
+      Premio_obtenido = character(),
+      Cambio_eleccion = character(),
+      Resultado = character(),
+      stringsAsFactors = FALSE
+    ))
+    simulacion_resultados(data.frame(
+      Ronda = integer(),
+      Premio_obtenido = character(),
+      Cambio_eleccion = character(),
+      Resultado = character(),
+      stringsAsFactors = FALSE
+    ))
+    puerta_elegida(NULL)
+    host_revealed(NULL)
+    revealed(FALSE)
+    round_done(FALSE)
+    setPrizes()
+    
+    for(i in seq_len(np)) {
+      runjs(sprintf("
+        $('#puerta_%s .label').text('Puerta %s').show();
+        $('#puerta_%s .prize').hide();
+        $('#puerta_%s').css('background-color','#3498db').prop('disabled',false);
+      ", i, i, i, i))
+    }
+    
+    hide("cambiar")
+    hide("continuar")
+    hide("graficos_rondas_panel")
+    hide("graficos_simulacion_panel")
+    hide("resultados_simulacion_panel")
+    output$mensaje_ganador <- renderText("")
+    output$contador_revelacion <- renderText("")
+  }
+  
+  # Prepara nueva ronda (mantiene historial)
+  nuevaRonda <- function() {
+    ronda(ronda() + 1)
+    puerta_elegida(NULL)
+    host_revealed(NULL)
+    revealed(FALSE)
+    round_done(FALSE)
+    setPrizes()
+    
+    for(i in seq_len(np)) {
+      runjs(sprintf("
+        $('#puerta_%s .label').text('Puerta %s').show();
+        $('#puerta_%s .prize').hide();
+        $('#puerta_%s').css('background-color','#3498db').prop('disabled',false);
+      ", i, i, i, i))
+    }
+    
+    hide("cambiar")
+    hide("continuar")
+    output$mensaje_ganador <- renderText("")
+    output$contador_revelacion <- renderText("")
+  }
+  
+  # Eventos de control
+  observeEvent(input$modo_jugar, {
+    resetGame()
+    hide("inicio_panel")
+    show("juego_panel")
+  })
+  
+  observeEvent(input$reiniciar, resetGame())
+  observeEvent(input$jugar_nuevo, nuevaRonda())
+  observeEvent(input$volver_inicio, {
+    show("inicio_panel")
+    hide("juego_panel")
+  })
+  
+  # Mostrar/ocultar puertas
+  observeEvent(input$mostrar_puertas, {
+    for(i in seq_len(np)) {
+      runjs(sprintf(
+        "$('#puerta_%s .label').hide(); $('#puerta_%s .prize').show();",
+        i, i
+      ))
+    }
+  })
+  
+  observeEvent(input$ocultar_puertas, {
+    for(i in seq_len(np)) {
+      runjs(sprintf(
+        "$('#puerta_%s .prize').hide(); $('#puerta_%s .label').show();",
+        i, i
+      ))
+    }
+  })
+  
+  # Lógica del juego
+  for(i in seq_len(np)) local({
+    idx <- i
+    observeEvent(input[[paste0("puerta_", idx)]], {
+      req(!revealed())
+      for(j in seq_len(np)) runjs(sprintf("$('#puerta_%s').prop('disabled',true);", j))
+      current <- premios(); chosen <- idx; goats <- which(current == "🐐 Cabra")
+      toHide  <- if(current[chosen] != "🚗 Tesla") goats[goats != chosen] else sample(goats, 1)
+      puerta_elegida(chosen)
+      runjs(sprintf("$('#puerta_%s').css('background-color','#2ecc71');", chosen))
+      output$contador_revelacion <- renderText("⏳ El presentador revela una cabra...")
+      
+      shinyjs::delay(2000, {
+        host_revealed(toHide)
+        runjs(sprintf(
+          "$('#puerta_%s .label').hide(); $('#puerta_%s .prize').show(); $('#puerta_%s').css('background-color','#e74c3c');",
+          toHide, toHide, toHide
+        ))
+        runjs(sprintf("$('#puerta_%s').css('background-color','#2ecc71');", chosen))
+        revealed(TRUE)
+        show("cambiar")
+        show("continuar")
+        output$pregunta_cambio <- renderText("¿Continuar o cambiar?")
+        output$contador_revelacion <- renderText("")
+      })
+    }, ignoreInit = TRUE)
+  })
+  
+  # Procesar resultado
+  procesaResultado <- function(cambio) {
+    req(revealed())
+    if(round_done()) return()
+    
+    round_done(TRUE)
+    output$contador_revelacion <- renderText("⏳ Revelando todas las puertas...")
+    
+    shinyjs::delay(2000, {
+      if(cambio == "Sí") {
+        newPick <- setdiff(seq_len(np), c(puerta_elegida(), host_revealed()))
+        puerta_elegida(newPick)
+      }
+      
+      res <- premios()[puerta_elegida()]
+      win <- (res == "🚗 Tesla")
+      
+      # Registrar en tabla de rondas
+      nueva_fila <- data.frame(
+        Ronda = ronda(),
+        Premio_obtenido = res,
+        Cambio_eleccion = cambio,
+        Resultado = ifelse(win, "Ganada", "Perdida"),
+        stringsAsFactors = FALSE
+      )
+      
+      rondas_jugadas(rbind(rondas_jugadas(), nueva_fila))
+      
+      output$estado_juego <- renderText(paste("Ronda", ronda(), "completada"))
+      output$mensaje_ganador <- renderText(ifelse(win, "¡Ganaste un Tesla! 🚗", "¡Una cabra! 🐐"))
+      
+      hide("cambiar")
+      hide("continuar")
+      output$contador_revelacion <- renderText("")
+    })
+  }
+  
+  observeEvent(input$continuar, { procesaResultado("No") })
+  observeEvent(input$cambiar, { procesaResultado("Sí") })
+  
+  # Simulación
+  simularJuego <- function(cambiar) {
+    v <- rep("🐐 Cabra", np)
+    v[sample(np,1)] <- "🚗 Tesla"
+    
+    elegida <- sample(np, 1)
+    goats <- which(v == "🐐 Cabra")
+    
+    if (v[elegida] != "🚗 Tesla") {
+      revelada <- goats[goats != elegida]
+    } else {
+      revelada <- sample(goats, 1)
+    }
+    
+    if (cambiar) {
+      elegida <- setdiff(1:np, c(elegida, revelada))[1]
+    }
+    
+    resultado <- ifelse(v[elegida] == "🚗 Tesla", "Ganada", "Perdida")
+    
+    return(data.frame(
+      Ronda = NA,
+      Premio_obtenido = v[elegida],
+      Cambio_eleccion = ifelse(cambiar, "Sí", "No"),
+      Resultado = resultado,
+      stringsAsFactors = FALSE
+    ))
+  }
+  
+  observeEvent(input$simular, {
+    req(input$num_simulaciones > 0)
+    
+    shinyjs::disable("simular")
+    
+    # Simular juegos cambiando
+    resultados_cambiar <- lapply(1:input$num_simulaciones, function(x) simularJuego(TRUE))
+    df_cambiar <- do.call(rbind, resultados_cambiar)
+    
+    # Simular juegos sin cambiar
+    resultados_no_cambiar <- lapply(1:input$num_simulaciones, function(x) simularJuego(FALSE))
+    df_no_cambiar <- do.call(rbind, resultados_no_cambiar)
+    
+    # Combinar resultados
+    df_final <- rbind(df_cambiar, df_no_cambiar)
+    
+    # Actualizar historial de simulaciones
+    simulacion_resultados(df_final)
+    
+    shinyjs::enable("simular")
+    show("resultados_simulacion_panel")
+  })
+  
+  # Gráficos para rondas jugadas
+  output$grafico_lineas_rondas <- renderPlot({
+    df <- rondas_jugadas()
+    req(nrow(df) > 0)
+    
+    df_acum <- df %>%
+      mutate(Ganada = ifelse(Resultado == "Ganada", 1, 0)) %>%
+      group_by(Cambio_eleccion) %>%
+      mutate(Acumulado = cumsum(Ganada),
+             Porcentaje = Acumulado / seq_along(Acumulado) * 100,
+             Juego = seq_along(Acumulado)) %>%
+      ungroup() %>%
+      mutate(Estrategia = ifelse(Cambio_eleccion == "Sí", "Cambiar", "Continuar"))
+    
+    ggplot(df_acum, aes(x = Juego, y = Porcentaje, color = Estrategia)) +
+      geom_line(size = 1.2) +
+      geom_point(size = 2) +
+      labs(title = "Evolución del porcentaje de aciertos (Rondas jugadas)",
+           x = "Número de ronda", y = "Porcentaje de aciertos (%)",
+           color = "Estrategia") +
+      scale_color_manual(values = c("#2ecc71", "#f39c12")) +
+      theme_minimal() +
+      theme(legend.position = "bottom",
+            plot.title = element_text(hjust = 0.5, size = 14),
+            axis.title = element_text(size = 12)) +
+      ylim(0, 100)
+  })
+  
+  output$grafico_barras_rondas <- renderPlot({
+    df <- rondas_jugadas()
+    req(nrow(df) > 0)
+    
+    df_sum <- df %>%
+      group_by(Cambio_eleccion) %>%
+      summarise(Ganadas = sum(Resultado == "Ganada"),
+                Total = n(),
+                Porcentaje = Ganadas / Total * 100) %>%
+      mutate(Estrategia = factor(ifelse(Cambio_eleccion == "Sí", "Cambiar", "Continuar"),
+                                 levels = c("Cambiar", "Continuar")))
+    
+    ggplot(df_sum, aes(x = Estrategia, y = Porcentaje, fill = Estrategia)) +
+      geom_col(width = 0.5) +
+      geom_text(aes(label = paste0(round(Porcentaje, 1), "%\n(", Ganadas, "/", Total, ")")), 
+                vjust = -0.3, size = 5, lineheight = 0.8) +
+      labs(title = "Porcentaje de éxito por estrategia (Rondas jugadas)", 
+           subtitle = "Cada barra muestra el porcentaje independiente de aciertos para cada estrategia",
+           x = "", y = "Porcentaje de aciertos (%)") +
+      scale_fill_manual(values = c("#2ecc71", "#f39c12"), guide = "none") +
+      theme_minimal() +
+      theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+            plot.subtitle = element_text(hjust = 0.5, size = 10),
+            axis.text = element_text(size = 12),
+            axis.title = element_text(size = 12)) +
+      ylim(0, 100)
+  })
+  
+  # Gráficos para simulación
+  output$grafico_lineas_simulacion <- renderPlot({
+    df <- simulacion_resultados()
+    req(nrow(df) > 0)
+    
+    df_acum <- df %>%
+      mutate(Ganada = ifelse(Resultado == "Ganada", 1, 0)) %>%
+      group_by(Cambio_eleccion) %>%
+      mutate(Acumulado = cumsum(Ganada),
+             Porcentaje = Acumulado / seq_along(Acumulado) * 100,
+             Juego = seq_along(Acumulado)) %>%
+      ungroup() %>%
+      mutate(Estrategia = ifelse(Cambio_eleccion == "Sí", "Cambiar", "Continuar"))
+    
+    ggplot(df_acum, aes(x = Juego, y = Porcentaje, color = Estrategia)) +
+      geom_line(size = 1.2) +
+      geom_point(size = 2) +
+      labs(title = "Evolución del porcentaje de aciertos (Simulación)",
+           x = "Número de simulación", y = "Porcentaje de aciertos (%)",
+           color = "Estrategia") +
+      scale_color_manual(values = c("#2ecc71", "#f39c12")) +
+      theme_minimal() +
+      theme(legend.position = "bottom",
+            plot.title = element_text(hjust = 0.5, size = 14),
+            axis.title = element_text(size = 12)) +
+      ylim(0, 100)
+  })
+  
+  output$grafico_barras_simulacion <- renderPlot({
+    df <- simulacion_resultados()
+    req(nrow(df) > 0)
+    
+    df_sum <- df %>%
+      group_by(Cambio_eleccion) %>%
+      summarise(Ganadas = sum(Resultado == "Ganada"),
+                Total = n(),
+                Porcentaje = Ganadas / Total * 100) %>%
+      mutate(Estrategia = factor(ifelse(Cambio_eleccion == "Sí", "Cambiar", "Continuar"),
+                                 levels = c("Cambiar", "Continuar")))
+    
+    ggplot(df_sum, aes(x = Estrategia, y = Porcentaje, fill = Estrategia)) +
+      geom_col(width = 0.5) +
+      geom_text(aes(label = paste0(round(Porcentaje, 1), "%\n(", Ganadas, "/", Total, ")")), 
+                vjust = -0.3, size = 5, lineheight = 0.8) +
+      labs(title = "Porcentaje de éxito por estrategia (Simulación)", 
+           subtitle = "Cada barra muestra el porcentaje independiente de aciertos para cada estrategia",
+           x = "", y = "Porcentaje de aciertos (%)") +
+      scale_fill_manual(values = c("#2ecc71", "#f39c12"), guide = "none") +
+      theme_minimal() +
+      theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+            plot.subtitle = element_text(hjust = 0.5, size = 10),
+            axis.text = element_text(size = 12),
+            axis.title = element_text(size = 12)) +
+      ylim(0, 100)
+  })
+}
+
+shinyApp(ui, server)
